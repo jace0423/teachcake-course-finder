@@ -42,8 +42,20 @@ const CN=['ta','chip','fundamental','macro','emotion','crypto','strategy','indus
 const NAME={ta:'技術面',chip:'籌碼面',fundamental:'基本面',macro:'總體經濟',emotion:'交易心理',crypto:'加密貨幣',strategy:'交易策略',industry:'產業類股',etf:'ETF/被動投資',tech:'科技趨勢',uncategorized:'未分類'};
 const COLOR={ta:'#e8915b',chip:'#5b9bd5',fundamental:'#5bbf8a',macro:'#d6b04e',emotion:'#d57aa0',crypto:'#a98ad6',strategy:'#4cc2b5',industry:'#d68a6a',etf:'#8fc457',tech:'#6c8cff',uncategorized:'#7c828c'};
 let DATA=[],filterCat='',q='';
-function esc(s){return (s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
-function hl(s,terms){let r=esc(s);terms.forEach(t=>{if(!t)return;const re=new RegExp('('+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig');r=r.replace(re,'<mark>$1</mark>');});return r}
+// 安全防護:轉義 & < > " '
+function esc(s){return (s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+// 安全高亮:先轉義、再標記,封鎖 HTML 注入
+function hl(s,terms){
+ let r=esc(s);
+ if(!terms||!terms.length) return r;
+ terms.forEach(t=>{
+  if(!t) return;
+  const et=esc(t); if(!et) return;
+  const re=new RegExp('('+et.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig');
+  r=r.replace(re,'<mark>$1</mark>');
+ });
+ return r;
+}
 function parseCSV(text){const lines=[];let row=[],cur='',inq=false;
  for(let i=0;i<text.length;i++){const ch=text[i];
   if(inq){if(ch=='"'){if(text[i+1]=='"'){cur+='"';i++;}else inq=false;}else cur+=ch;}
@@ -65,7 +77,6 @@ function render(){
  if(terms.length) list=list.map(r=>{const hay=(r.name+' '+r.tags).toLowerCase();let s=0;terms.forEach(t=>{if(r.name.toLowerCase().includes(t))s+=3;if(r.tags.toLowerCase().includes(t))s+=2;});return {r,s};}).sort((a,b)=>b.s-a.s).map(x=>x.r);
  document.getElementById('cnt').textContent=' '+list.length+' 門';
  if(!list.length){wrap.innerHTML='<div class=empty>找不到相符課程</div>';return;}
- // 無搜尋字 → 依分類分組;有字 → 直接排名列出
  // 無搜尋時依分類分組:用 DATA 重算(不污染)+ 尊重分類按鈕(filterCat)
  const base = filterCat ? DATA.filter(r=>r.catcode===filterCat) : DATA;
  const groups = terms.length ? [['',list]] : CN.map(c=>[c, base.filter(r=>r.catcode===c)]).filter(g=>g[1].length);
@@ -74,10 +85,12 @@ function render(){
   arr.forEach(r=>{
    const d=document.createElement('div');d.className='card';d.style.setProperty('--c',COLOR[r.catcode]||'#888');
    const tags=(r.tags||'').split('、').filter(Boolean).slice(0,5).map(t=>'<span class=tag>'+hl(t,terms)+'</span>').join('');
+   // 安全防護:href 只允許 http(s),擋 javascript: 偽協定
+   const safeLink=(r.link && /^https?:\/\//i.test(r.link.trim())) ? esc(r.link.trim()) : '';
    d.innerHTML='<div class=b><div class=nm>'+hl(r.name,terms)+'</div><div class=meta>'+
      '<span class=catpill style="background:'+COLOR[r.catcode]+'">'+esc(r.cat)+'</span>'+
-     '<span class="conf '+r.conf+'">信心'+r.conf+'</span>'+tags+'</div></div>'+
-     (r.link?'<a class=open href="'+esc(r.link)+'" target=_blank>開啟</a>':'');
+     '<span class="conf '+esc(r.conf)+'">信心'+esc(r.conf)+'</span>'+tags+'</div></div>'+
+     (safeLink?'<a class=open href="'+safeLink+'" target=_blank rel=noopener>開啟</a>':'');
    wrap.appendChild(d);
   });
  });
