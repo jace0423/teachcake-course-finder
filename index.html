@@ -66,7 +66,8 @@ function render(){
  document.getElementById('cnt').textContent=' '+list.length+' 門';
  if(!list.length){wrap.innerHTML='<div class=empty>找不到相符課程</div>';return;}
  // 無搜尋字 → 依分類分組;有字 → 直接排名列出
- const groups = terms.length ? [['',list]] : CN.map(c=>[c,list.filter(r=>r.catcode===c)]).filter(g=>g[1].length);
+ // 【已修復】無搜尋字時，改回從最原始的 DATA 去做分類分組，避免資料被上一次的篩選污染
+ const groups = terms.length ? [['',list]] : CN.map(c=>[c,DATA.filter(r=>r.catcode===c)]).filter(g=>g[1].length);
  groups.forEach(([c,arr])=>{
   if(c){const h=document.createElement('div');h.className='gh';h.innerHTML='<span class=dot style="background:'+COLOR[c]+'"></span>'+NAME[c]+' <span class=cnt>'+arr.length+'</span>';wrap.appendChild(h);}
   arr.forEach(r=>{
