@@ -1,0 +1,98 @@
+<!doctype html><html lang=zh-Hant><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>課程搜尋</title><style>
+:root{--bg:#15181e;--panel:#20242c;--line:#2d323b;--tx:#e7e9ec;--mut:#8b919c}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,"Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--tx);font-size:15px;line-height:1.5}
+header{position:sticky;top:0;background:var(--panel);padding:16px 18px;border-bottom:1px solid var(--line);z-index:5}
+h1{font-size:18px;margin:0 0 10px}
+#q{width:100%;max-width:560px;padding:12px 15px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font-size:16px}
+.cats{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
+.cats button{padding:6px 12px;border-radius:20px;border:1px solid var(--line);background:var(--bg);color:var(--mut);font-size:13px;cursor:pointer}
+.cats button.on{color:#fff}
+.hint{font-size:12px;color:var(--mut);margin-top:8px}
+.wrap{max-width:960px;margin:0 auto;padding:16px 18px 70px}
+.grp{margin-bottom:8px}
+.gh{font-size:14px;font-weight:700;margin:18px 0 8px;display:flex;align-items:center;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%}
+.card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:11px;padding:11px 14px;margin:8px 0;display:flex;gap:12px;align-items:flex-start}
+.card .b{flex:1;min-width:0}
+.nm{font-weight:600;font-size:15px;word-break:break-word}
+.meta{margin-top:5px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tag{font-size:11px;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.06);color:#9ec3ea;border:1px solid var(--line)}
+.catpill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;color:#15171c}
+.conf{font-size:10px;padding:1px 7px;border-radius:6px;border:1px solid var(--line)}
+.conf.高{color:#7ee2a8;border-color:#2f6f4a}.conf.中{color:#e0c060}.conf.低{color:#e89}
+.open{flex:0 0 auto;padding:7px 13px;border-radius:9px;background:#3b6ea5;color:#fff;text-decoration:none;font-size:13px;white-space:nowrap}
+.open.no{background:#2a2f3a;color:var(--mut);pointer-events:none}
+mark{background:#ffe08a;color:#000;border-radius:3px;padding:0 1px}
+.cnt{color:var(--mut);font-size:13px}
+.empty{color:var(--mut);text-align:center;padding:40px}
+</style></head><body>
+<header>
+<h1>🔍 課程搜尋 <span class=cnt id=cnt></span></h1>
+<input id=q placeholder="打白話詞:主力、停損、外資、升息、AI、可轉債…" autofocus>
+<div class=cats id=cats></div>
+<div class=hint>模糊比對 課名+分類+標籤。打字即時找;清空看全部(依分類)。信心低=AI判讀、僅供參考。</div>
+</header>
+<div class=wrap id=wrap><div class=empty>載入中…</div></div>
+<script>
+// 留空=讀本機 course_sheet.json;要改讀 Google Sheet,貼上「發布為 CSV」的網址:
+const SHEET_CSV_URL = "";
+const CN=['ta','chip','fundamental','macro','emotion','crypto','strategy','industry','etf','tech','uncategorized'];
+const NAME={ta:'技術面',chip:'籌碼面',fundamental:'基本面',macro:'總體經濟',emotion:'交易心理',crypto:'加密貨幣',strategy:'交易策略',industry:'產業類股',etf:'ETF/被動投資',tech:'科技趨勢',uncategorized:'未分類'};
+const COLOR={ta:'#e8915b',chip:'#5b9bd5',fundamental:'#5bbf8a',macro:'#d6b04e',emotion:'#d57aa0',crypto:'#a98ad6',strategy:'#4cc2b5',industry:'#d68a6a',etf:'#8fc457',tech:'#6c8cff',uncategorized:'#7c828c'};
+let DATA=[],filterCat='',q='';
+function esc(s){return (s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
+function hl(s,terms){let r=esc(s);terms.forEach(t=>{if(!t)return;const re=new RegExp('('+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig');r=r.replace(re,'<mark>$1</mark>');});return r}
+function parseCSV(text){const lines=[];let row=[],cur='',inq=false;
+ for(let i=0;i<text.length;i++){const ch=text[i];
+  if(inq){if(ch=='"'){if(text[i+1]=='"'){cur+='"';i++;}else inq=false;}else cur+=ch;}
+  else{if(ch=='"')inq=true;else if(ch==','){row.push(cur);cur='';}else if(ch=='\n'){row.push(cur);lines.push(row);row=[];cur='';}else if(ch!='\r')cur+=ch;}}
+ if(cur||row.length){row.push(cur);lines.push(row);}
+ const hd=lines.shift().map(h=>h.trim());
+ const idx=n=>hd.indexOf(n);
+ return lines.filter(r=>r.length>1).map(r=>({name:r[idx('課名')],cat:r[idx('分類')],catcode:CN.find(c=>NAME[c]===r[idx('分類')])||'uncategorized',conf:r[idx('信心')],tags:r[idx('標籤')],link:r[idx('連結')],status:r[idx('內文狀態')]}));
+}
+function render(){
+ const wrap=document.getElementById('wrap');wrap.innerHTML='';
+ const terms=q.toLowerCase().split(/\s+/).filter(Boolean);
+ let list=DATA.filter(r=>{
+  if(filterCat && r.catcode!==filterCat) return false;
+  if(!terms.length) return true;
+  const hay=(r.name+' '+r.cat+' '+r.tags).toLowerCase();
+  return terms.every(t=>hay.includes(t));
+ });
+ if(terms.length) list=list.map(r=>{const hay=(r.name+' '+r.tags).toLowerCase();let s=0;terms.forEach(t=>{if(r.name.toLowerCase().includes(t))s+=3;if(r.tags.toLowerCase().includes(t))s+=2;});return {r,s};}).sort((a,b)=>b.s-a.s).map(x=>x.r);
+ document.getElementById('cnt').textContent=' '+list.length+' 門';
+ if(!list.length){wrap.innerHTML='<div class=empty>找不到相符課程</div>';return;}
+ // 無搜尋字 → 依分類分組;有字 → 直接排名列出
+ const groups = terms.length ? [['',list]] : CN.map(c=>[c,list.filter(r=>r.catcode===c)]).filter(g=>g[1].length);
+ groups.forEach(([c,arr])=>{
+  if(c){const h=document.createElement('div');h.className='gh';h.innerHTML='<span class=dot style="background:'+COLOR[c]+'"></span>'+NAME[c]+' <span class=cnt>'+arr.length+'</span>';wrap.appendChild(h);}
+  arr.forEach(r=>{
+   const d=document.createElement('div');d.className='card';d.style.setProperty('--c',COLOR[r.catcode]||'#888');
+   const tags=(r.tags||'').split('、').filter(Boolean).slice(0,5).map(t=>'<span class=tag>'+hl(t,terms)+'</span>').join('');
+   d.innerHTML='<div class=b><div class=nm>'+hl(r.name,terms)+'</div><div class=meta>'+
+     '<span class=catpill style="background:'+COLOR[r.catcode]+'">'+esc(r.cat)+'</span>'+
+     '<span class="conf '+r.conf+'">信心'+r.conf+'</span>'+tags+'</div></div>'+
+     (r.link?'<a class=open href="'+esc(r.link)+'" target=_blank>開啟</a>':'');
+   wrap.appendChild(d);
+  });
+ });
+}
+function buildCats(){
+ const box=document.getElementById('cats');
+ const counts={};DATA.forEach(r=>counts[r.catcode]=(counts[r.catcode]||0)+1);
+ box.innerHTML='<button data-c="" class=on style="border-color:#3b6ea5;background:#3b6ea5;color:#fff">全部 '+DATA.length+'</button>'+
+  CN.filter(c=>counts[c]).map(c=>'<button data-c="'+c+'" style="border-left:3px solid '+COLOR[c]+'">'+NAME[c]+' '+counts[c]+'</button>').join('');
+ box.querySelectorAll('button').forEach(b=>b.onclick=()=>{filterCat=b.dataset.c;box.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');render();});
+}
+(async()=>{
+ try{
+  if(SHEET_CSV_URL){const t=await (await fetch(SHEET_CSV_URL)).text();DATA=parseCSV(t);}
+  else{DATA=await (await fetch('course_sheet.json')).json();}
+  buildCats();render();
+ }catch(e){document.getElementById('wrap').innerHTML='<div class=empty>載入失敗:'+esc(e.message)+'</div>';}
+})();
+document.getElementById('q').addEventListener('input',e=>{q=e.target.value.trim();render();});
+</script></body></html>
